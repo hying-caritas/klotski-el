@@ -3,12 +3,20 @@
 ** Introduction
 
 The Klotski (Hua Rong Dao) game is a traditional Chinese game.  This
-is the implementation for Emacs.
+is a implementation for Emacs.
 
-** How to place
+** Install
+
+Use shell command line "make dist" to generate the package file, then
+use "package-install-file" in Emacs to install it.
+
+** Quick start
+
+Start the game with "M-x" "klotski-game" in Emacs.
 
 Select an actor with corresponding letter.  Move it up, down, left or
-right.  When "c" arrives the middle bottom of the board, you win.
+right with arrow key.  When "c" arrives the middle bottom of the
+board, you win.
 
 You can show your steps so far in another buffer with "C-o".  After
 saving your steps, you can replay it with "C-t".

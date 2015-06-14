@@ -1,0 +1,32 @@
+* Klotski (Hua Rong Dao) Game in Emacs
+
+** Introduction
+
+The Klotski (Hua Rong Dao) game is a traditional Chinese game.  This
+is the implementation for Emacs.
+
+** How to place
+
+Select an actor with corresponding letter.  Move it up, down, left or
+right.  When "c" arrives the middle bottom of the board, you win.
+
+You can show your steps so far in another buffer with "C-o".  After
+saving your steps, you can replay it with "C-t".
+
+** Screen shot
+
+#+BEGIN_EXAMPLE
+  Klotski (Hua Rong Dao) Game
+
+  ahmz
+  ahmz
+  21gg
+   cc4
+   cc3
+
+Steps: 154
+
+Congratulation!  You success!
+
+Restart with C-r
+#+END_EXAMPLE

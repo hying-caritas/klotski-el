@@ -24,6 +24,135 @@
 
 (require 'cl-lib)
 
+(cl-defun dcons (car cdr cer)
+  (vector car cdr cer))
+
+(cl-defun dcar (dcons)
+  (and dcons (aref dcons 0)))
+
+(cl-defun dcdr (dcons)
+  (and dcons (aref dcons 1)))
+
+(cl-defun dcpr (dcons)
+  (and dcons (aref dcons 2)))
+
+(cl-defun set-dcar (dcons value)
+  (setf (aref dcons 0) value))
+(gv-define-simple-setter dcar set-dcar)
+
+(cl-defun set-dcdr (dcons value)
+  (setf (aref dcons 1) value))
+(gv-define-simple-setter dcdr set-dcdr)
+
+(cl-defun set-dcpr (dcons value)
+  (setf (aref dcons 2) value))
+(gv-define-simple-setter dcpr set-dcpr)
+
+(cl-defun dlist-push-head (value dlist)
+  (let ((ndcons (dcons value dlist nil)))
+    (when dlist
+      (setf (dcpr dlist) ndcons))
+    ndcons))
+
+(cl-defmacro dlist-push-headf (value dlist)
+  (gv-letplace (getter setter) dlist
+    (funcall setter `(dlist-push-head ,value ,getter))))
+
+(cl-defun dlist-push-tail (value dlist)
+  (let ((ndcons (dcons value nil dlist)))
+    (when dlist
+      (setf (dcdr dlist) ndcons))
+    ndcons))
+
+(cl-defmacro dlist-push-tailf (value dlist)
+  (gv-letplace (getter setter) dlist
+    (funcall setter `(dlist-push-tail ,value ,getter))))
+
+(cl-defun dlist-pop-head (dlist)
+  (if dlist
+      (let ((next (dcdr dlist)))
+	(if next
+	    (setf (dcpr next) nil))
+	(list (dcar dlist) next))
+    (list nil nil)))
+
+(cl-defmacro dlist-pop-headf (dlist)
+  (gv-letplace (getter setter) dlist
+    (let ((value-var (cl-gensym))
+	  (dlist-var (cl-gensym)))
+      `(cl-multiple-value-bind (,value-var ,dlist-var)
+	   (dlist-pop-head ,getter)
+	 ,(funcall setter dlist-var)
+	 ,value-var))))
+
+(cl-defun dlist-pop-tail (dlist)
+  (if dlist
+      (let ((prev (dcpr dlist)))
+	(if prev
+	    (setf (dcdr prev) nil))
+	(list (dcar dlist) prev))
+    (list nil nil)))
+
+(cl-defmacro dlist-pop-tailf (dlist)
+  (gv-letplace (getter setter) dlist
+    (let ((value-var (cl-gensym))
+	  (dlist-var (cl-gensym)))
+      `(cl-multiple-value-bind (,value-var ,dlist-var)
+	   (dlist-pop-tail ,getter)
+	 ,(funcall setter dlist-var)
+	 ,value-var))))
+
+(cl-defun dlist-head (dlist)
+  (and dlist
+       (let ((prev (dcpr dlist)))
+	 (while prev
+	   (setf dlist prev)
+	   (setf prev (dcpr dlist)))
+	 dlist)))
+
+(cl-defun dlist-tail (dlist)
+  (and dlist
+       (let ((next (dcdr dlist)))
+	 (while next
+	   (setf dlist next)
+	   (setf next (dcdr dlist)))
+	 dlist)))
+
+(cl-defmacro dlist-nextf (dlist)
+  (gv-letplace (getter setter) dlist
+    (funcall setter `(dcdr ,getter))))
+
+(cl-defmacro dlist-prevf (dlist)
+  (gv-letplace (getter setter) dlist
+    (funcall setter `(dcpr ,getter))))
+
+(cl-defun dlist-lastp (dlist)
+  (and dlist (null (dcdr dlist))))
+
+(cl-defmacro do-dlist ((var dlist) &body body)
+  (let ((dlist-var (cl-gensym)))
+    `(let (,var
+	   (,dlist-var ,dlist))
+      (while ,dlist-var
+	(setf ,var (dcar ,dlist-var))
+	,@body
+	(setf ,dlist-var (dcdr ,dlist-var))))))
+
+(cl-defun list->dlist (list)
+  (if (null list)
+      nil
+    (let* ((dlist (dlist-push-tail (car list) nil))
+	   (dpos dlist))
+      (dolist (val (cdr list))
+	(dlist-push-tailf val dpos))
+      dlist)))
+
+(cl-defun dlist->list (dlist)
+  (let (list)
+    (do-dlist (val dlist)
+      (push val list))
+    (nreverse list)))
+
 (defconst +klotski-rows+ 5)
 (defconst +klotski-cols+ 4)
 
@@ -51,10 +180,9 @@
 (defvar *klotski-current-actor*)
 
 (defvar *klotski-steps*)
-(defvar *klotski-step-counts*)
+(defvar *klotski-steps-count*)
 
-(defvar *klotski-replay-steps*)
-(defvar *klotski-replay-timer*)
+(defvar *klotski-replay-timer* nil)
 
 (define-derived-mode klotski-mode special-mode "KLOTSKI"
   "Klotski (Hua Rong Dao) Game"
@@ -66,6 +194,7 @@
     (setf *klotski-empty-cell-string* str))
   (define-key klotski-mode-map (kbd "C-r") #'klotski-reset)
   (define-key klotski-mode-map (kbd "C-_") #'klotski-undo)
+  (define-key klotski-mode-map (kbd "C-+") #'klotski-redo)
   (define-key klotski-mode-map (kbd "C-o") #'klotski-show-steps)
   (define-key klotski-mode-map (kbd "C-t") #'klotski-replay))
 
@@ -74,7 +203,9 @@
   (read-only-mode)
   (set-buffer-modified-p nil)
   (define-key klotski-replay-mode-map (kbd "p") #'klotski-replay-toggle-pause)
-  (define-key klotski-replay-mode-map (kbd "q") #'klotski-replay-stop))
+  (define-key klotski-replay-mode-map (kbd "q") #'klotski-replay-stop)
+  (define-key klotski-replay-mode-map (kbd "C-_") #'klotski-undo)
+  (define-key klotski-replay-mode-map (kbd "C-+") #'klotski-redo))
 
 ;;;###autoload
 (cl-defun klotski-game ()
@@ -135,18 +266,52 @@
     (klotski-actor-move actor dir)
     actor))
 
-(cl-defun klotski-move (dir &optional undo)
+(cl-defun klotski-move (dir &optional record)
+  (klotski-erase-board)
   (klotski-put-normal-actors)
   (let ((actor (klotski-current-actor-try-move dir)))
     (unless (klotski-actor-check-collision actor)
       (klotski-current-actor-move dir)
-      (if undo
-	  (decf *klotski-step-counts*)
-	(incf *klotski-step-counts*)
-	(push (cons *klotski-current-actor* dir)
-	      *klotski-steps*)))
+      (when record
+       (klotski-steps-push (cons *klotski-current-actor* dir))))
     (klotski-put-current-actor)
     (klotski-print-board)))
+
+(cl-defun klotski-steps-reset ()
+  (setf *klotski-steps* (dcons nil nil nil)
+	*klotski-steps-count* 0))
+
+(cl-defun klotski-steps-push (step)
+  (dlist-push-tailf step *klotski-steps*)
+  (incf *klotski-steps-count*))
+
+(cl-defun klotski-steps-refill (steps)
+  (klotski-steps-reset)
+  (let ((ksteps *klotski-steps*))
+    (dolist (step steps)
+      (dlist-push-tailf step ksteps))))
+
+(cl-defun klotski-steps-go-backward ()
+  (let ((step (dcar *klotski-steps*)))
+    (when step
+      (setf *klotski-steps* (dcpr *klotski-steps*))
+      (decf *klotski-steps-count*))
+    step))
+
+(cl-defun klotski-steps-go-forward ()
+  (let ((next (dcdr *klotski-steps*)))
+    (and next
+	 (progn
+	   (setf *klotski-steps* next)
+	   (incf *klotski-steps-count*)
+	   (dcar next)))))
+
+(cl-defmacro klotski-steps-do-step (var &body body)
+  `(do-dlist (,var (dcdr (dlist-head *klotski-steps*)))
+	     ,@body))
+
+(cl-defun klotski-steps-at-lastp ()
+  (dlist-lastp *klotski-steps*))
 
 (cl-defun klotski-define-keys-for-move (map)
   (cl-loop
@@ -156,7 +321,7 @@
 	(define-key map (kbd dir-key)
 	  (lambda ()
 	    (interactive)
-	    (klotski-move dir))))))
+	    (klotski-move dir t))))))
 
 (cl-defun klotski-reverse-dir (dir)
   (cl-case dir
@@ -168,10 +333,22 @@
 (cl-defun klotski-undo ()
   (interactive)
   (with-current-buffer +klotski-buffer-name+
-    (when *klotski-steps*
-      (let ((step (pop *klotski-steps*)))
-	(klotski-set-current-actor (car step))
-	(klotski-move (klotski-reverse-dir (cdr step)) t)))))
+    (let ((step (klotski-steps-go-backward)))
+      (if step
+	  (progn
+	    (klotski-set-current-actor (car step))
+	    (klotski-move (klotski-reverse-dir (cdr step))))
+	(message "Already at begin of history!")))))
+
+(cl-defun klotski-redo ()
+  (interactive)
+  (with-current-buffer +klotski-buffer-name+
+    (let ((step (klotski-steps-go-forward)))
+     (if step
+	 (progn
+	   (klotski-set-current-actor (car step))
+	   (klotski-move (cdr step)))
+       (message "Already at end of history!")))))
 
 (cl-defun klotski-show-steps ()
   (interactive)
@@ -180,7 +357,7 @@
     (with-current-buffer buffer
       (erase-buffer)
       (insert "(")
-      (dolist (step (reverse *klotski-steps*))
+      (klotski-steps-do-step step
 	(if first-line
 	    (setf first-line nil)
 	  (insert "\n "))
@@ -189,19 +366,10 @@
       (insert ")\n"))
     (display-buffer buffer)))
 
-(cl-defun klotski-replay-step (step)
-  (let ((actor (assoc (car step) *klotski-actors*))
-	(dir (cdr step)))
-    (when actor
-      (klotski-set-current-actor actor)
-      (klotski-move dir))))
-
 (cl-defun klotski-replay-check-step ()
-  (let ((step (pop *klotski-replay-steps*))
-	(buffer (get-buffer +klotski-buffer-name+)))
-    (if (and buffer step)
-	(with-current-buffer buffer
-	  (klotski-replay-step step))
+  (let ((buffer (get-buffer +klotski-buffer-name+)))
+    (if (and buffer (not (klotski-steps-at-lastp)))
+	(klotski-redo)
       (klotski-replay-stop))))
 
 (cl-defun klotski-replay-setup-timer ()
@@ -216,7 +384,7 @@
 (cl-defun klotski-replay-toggle-pause ()
   (interactive)
   (with-current-buffer +klotski-buffer-name+
-    (when *klotski-replay-steps*
+    (when (eq major-mode 'klotski-replay-mode)
       (if *klotski-replay-timer*
 	  (klotski-replay-stop-timer)
 	(klotski-replay-setup-timer)))))
@@ -224,29 +392,44 @@
 (cl-defun klotski-replay-stop ()
   (interactive)
   (with-current-buffer +klotski-buffer-name+
-    (setf *klotski-replay-steps* nil)
     (klotski-replay-stop-timer)
     (klotski-mode)
     (klotski-refresh)))
 
-(cl-defun klotski-replay-check-steps (steps)
-  (and (listp steps)
-       (dolist (step steps t)
-	 (unless (consp step)
-	   (cl-return nil)))))
+(cl-defun klotski-replay-check-steps (replay-steps)
+  (when (not (listp replay-steps))
+    (message "Invalid replay steps: not a list!")
+    (cl-return-from klotski-replay-check-steps))
+  (dolist (replay-step replay-steps t)
+    (unless (consp replay-step)
+      (message "Invalid replay steps: item is not a list: %s"
+	       (prin1 replay-step))
+      (cl-return-from klotski-replay-check-steps))
+    (let* ((actor-char (car replay-step))
+	   (actor (assoc actor-char *klotski-actors*)))
+      (unless actor
+	(message "Invalid replay steps: invalid actor char: %c" actor-char)
+	(cl-return-from klotski-replay-check-steps)))))
+
+(cl-defun klotski-replay-convert-steps (replay-steps)
+  (let (steps)
+    (dolist (replay-step replay-steps)
+      (let* ((actor-char (car replay-step))
+	     (actor (assoc actor-char *klotski-actors*)))
+	(push (cons actor (cdr replay-step)) steps)))
+    (nreverse steps)))
 
 (cl-defun klotski-replay (file)
   (interactive "fFile to replay: ")
-  (let ((steps (with-temp-buffer
-		 (insert-file-contents file)
-		 (read (current-buffer)))))
-    (if (klotski-replay-check-steps steps)
-	(with-current-buffer +klotski-buffer-name+
-	  (setf *klotski-replay-steps* steps)
-	  (klotski-replay-mode)
-	  (klotski-reset)
-	  (klotski-replay-setup-timer))
-      (message "Invalid steps file!"))))
+  (let ((replay-steps (with-temp-buffer
+			(insert-file-contents file)
+			(read (current-buffer)))))
+    (when (klotski-replay-check-steps replay-steps)
+      (with-current-buffer +klotski-buffer-name+
+	(klotski-reset)
+	(klotski-replay-mode)
+	(klotski-steps-refill (klotski-replay-convert-steps replay-steps))
+	(klotski-replay-setup-timer)))))
 
 (defface klotski-current-actor-face
   '((default :foreground "red" :height 2.0))
@@ -279,7 +462,6 @@
 	     (append pos (list str))))))
 
 (cl-defun klotski-put-normal-actors ()
-  (klotski-erase-board)
   (dolist (actor *klotski-actors*)
     (unless (eq actor *klotski-current-actor*)
       (klotski-put-normal-actor actor))))
@@ -303,11 +485,12 @@
       (dotimes (col +klotski-cols+)
 	(insert (klotski-get-cell row col)))
       (insert "\n"))
-    (insert (format "\nSteps: %d\n" *klotski-step-counts*))
+    (insert (format "\nSteps: %d\n" *klotski-steps-count*))
     (when (klotski-check-success)
       (insert "\nCongratulation!  You success!\n\nRestart with C-r\n"))))
 
 (cl-defun klotski-refresh ()
+  (klotski-erase-board)
   (klotski-put-normal-actors)
   (klotski-put-current-actor)
   (klotski-print-board))
@@ -316,10 +499,9 @@
   (interactive)
   (with-current-buffer +klotski-buffer-name+
    (setf *klotski-actors* (copy-tree +klotski-actors-setup+)
-	 *klotski-current-actor* (car *klotski-actors*)
-	 *klotski-steps* nil
-	 *klotski-step-counts* 0)
+	 *klotski-current-actor* (car *klotski-actors*))
+   (klotski-steps-reset)
    (klotski-define-keys-for-actors klotski-mode-map)
    (klotski-refresh)))
 
-(provide 'klotski-mode)
+(provide 'klotski)

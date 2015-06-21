@@ -244,18 +244,39 @@
     (klotski-mode)
     (klotski-reset)))
 
-(cl-defun klotski-index (row col)
+(defsubst klotski-index (row col)
   (+ (* +klotski-cols+ row) col))
-(cl-defun klotski-get-cell (row col)
+(defsubst klotski-get-cell (row col)
   (aref *klotski-board* (klotski-index row col)))
-(cl-defun klotski-set-cell (row col val)
+(defsubst klotski-set-cell (row col val)
   (setf (aref *klotski-board* (klotski-index row col)) val))
+(defsubst klotski-empty-cell-p (row col)
+  (null (first (klotski-get-cell row col))))
 
 (defsubst klotski-actor-char (actor)
   (car actor))
-
 (defsubst klotski-actor-pos-list (actor)
   (cdr actor))
+
+(cl-defun klotski-erase-board ()
+  (dotimes (row +klotski-rows+)
+    (dotimes (col +klotski-cols+)
+      (klotski-set-cell row col (list nil nil)))))
+
+(cl-defun klotski-put-actor (actor)
+  (cl-loop
+   for pos in (klotski-actor-pos-list actor)
+   for n upfrom 0
+   do (klotski-set-cell (first pos) (second pos)
+			(list actor n))))
+
+(defsubst klotski-put-current-actor ()
+  (klotski-put-actor *klotski-current-actor*))
+
+(cl-defun klotski-put-normal-actors ()
+  (dolist (actor *klotski-actors*)
+    (unless (eq actor *klotski-current-actor*)
+      (klotski-put-actor actor))))
 
 (cl-defun klotski-set-current-actor (actor)
   (setf *klotski-current-actor* actor)
@@ -275,9 +296,8 @@
 	      (>= (first pos) +klotski-rows+)
 	      (< (second pos) 0)
 	      (>= (second pos) +klotski-cols+)
-	      (not (eq (apply #'klotski-get-cell pos)
-		       *klotski-empty-cell-string*)))
-      (cl-return t))))
+	      (not (apply #'klotski-empty-cell-p pos)))
+      (cl-return-from klotski-actor-check-collision t))))
 
 (cl-defun klotski-actor-move (actor dir)
   (dolist (pos (klotski-actor-pos-list actor))
@@ -305,6 +325,16 @@
        (klotski-steps-push (cons *klotski-current-actor* dir))))
     (klotski-put-current-actor)
     (klotski-print-game)))
+
+(cl-defun klotski-define-keys-for-move (map)
+  (cl-loop
+   for adir in '(up down left right)
+   for dir-key in '("<up>" "<down>" "<left>" "<right>")
+   do (let ((dir adir))
+	(define-key map (kbd dir-key)
+	  (lambda ()
+	    (interactive)
+	    (klotski-move dir t))))))
 
 (cl-defun klotski-steps-reset ()
   (setf *klotski-steps* (dcons nil nil nil)
@@ -341,16 +371,6 @@
 
 (cl-defun klotski-steps-at-lastp ()
   (dlist-lastp *klotski-steps*))
-
-(cl-defun klotski-define-keys-for-move (map)
-  (cl-loop
-   for adir in '(up down left right)
-   for dir-key in '("<up>" "<down>" "<left>" "<right>")
-   do (let ((dir adir))
-	(define-key map (kbd dir-key)
-	  (lambda ()
-	    (interactive)
-	    (klotski-move dir t))))))
 
 (cl-defun klotski-reverse-dir (dir)
   (cl-case dir
@@ -470,43 +490,32 @@
   "Face for normal actor"
   :group 'klotski-faces)
 
-(cl-defun klotski-put-current-actor ()
-  (let* ((actor *klotski-current-actor*)
-	 (str (make-string 1 (klotski-actor-char actor))))
-    (put-text-property 0 1 'face 'klotski-current-actor-face str)
-    (dolist (pos (klotski-actor-pos-list actor))
-      (apply #'klotski-set-cell
-	     (append pos (list str))))))
-
-(cl-defun klotski-erase-board ()
-  (dotimes (row +klotski-rows+)
-    (dotimes (col +klotski-cols+)
-      (klotski-set-cell row col *klotski-empty-cell-string*))))
-
-(cl-defun klotski-put-normal-actor (actor)
-  (let ((str (make-string 1 (klotski-actor-char actor))))
-    (put-text-property 0 1 'face 'klotski-normal-actor-face str)
-    (dolist (pos (klotski-actor-pos-list actor))
-      (apply #'klotski-set-cell
-	     (append pos (list str))))))
-
-(cl-defun klotski-put-normal-actors ()
-  (dolist (actor *klotski-actors*)
-    (unless (eq actor *klotski-current-actor*)
-      (klotski-put-normal-actor actor))))
-
 (cl-defun klotski-check-success ()
   (let* ((caocao (assoc +klotski-caocao-char+ *klotski-actors*))
 	 (caocao-pos-list (klotski-actor-pos-list caocao)))
     (dolist (pos +klotski-exit-pos-list+ t)
       (unless (member pos caocao-pos-list)
-	(cl-return nil)))))
+	(cl-return-from klotski-check-success nil)))))
+
+(cl-defun klotski-print-cell (row col)
+  (cl-multiple-value-bind (actor npos)
+      (klotski-get-cell row col)
+    npos
+    (insert
+     (let ((str (and actor (make-string 1 (klotski-actor-char actor)))))
+       (cond
+	((null actor) *klotski-empty-cell-string*)
+	((eq actor *klotski-current-actor*)
+	 (put-text-property 0 1 'face 'klotski-current-actor-face str)
+	 str)
+	(t (put-text-property 0 1 'face 'klotski-normal-actor-face str)
+	   str))))))
 
 (cl-defun klotski-print-board ()
   (dotimes (row +klotski-rows+)
     (insert "  ")
     (dotimes (col +klotski-cols+)
-      (insert (klotski-get-cell row col)))
+      (klotski-print-cell row col))
     (insert "\n")))
 
 (cl-defun klotski-print-game ()

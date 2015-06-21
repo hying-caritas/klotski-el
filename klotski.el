@@ -161,17 +161,39 @@
 
 (defconst +klotski-buffer-name+ "*klotski*")
 
-(defconst +klotski-actors-setup+
-  `((,+klotski-caocao-char+ (0 1) (0 2) (1 1) (1 2))
-    (?g (2 1) (2 2))
-    (?z (0 0) (1 0))
-    (?a (0 3) (1 3))
-    (?m (2 0) (3 0))
-    (?h (2 3) (3 3))
-    (?1 (4 0))
-    (?2 (3 1))
-    (?3 (3 2))
-    (?4 (4 3))))
+(defconst +klotski-setups+
+  `(((,+klotski-caocao-char+ (0 1) (0 2) (1 1) (1 2))
+     (?g (2 1) (2 2))
+     (?z (0 0) (1 0))
+     (?a (0 3) (1 3))
+     (?m (2 0) (3 0))
+     (?h (2 3) (3 3))
+     (?1 (4 0))
+     (?2 (3 1))
+     (?3 (3 2))
+     (?4 (4 3)))
+    ((,+klotski-caocao-char+ (0 1) (0 2) (1 1) (1 2))
+     (?g (2 0) (2 1))
+     (?z (0 0) (1 0))
+     (?a (3 1) (3 2))
+     (?m (3 0) (4 0))
+     (?h (3 3) (4 3))
+     (?1 (0 3))
+     (?2 (1 3))
+     (?3 (2 2))
+     (?4 (2 3)))
+    ((,+klotski-caocao-char+ (0 1) (0 2) (1 1) (1 2))
+     (?g (2 1) (2 2))
+     (?z (0 0) (1 0))
+     (?a (0 3) (1 3))
+     (?m (3 1) (3 2))
+     (?h (4 1) (4 2))
+     (?1 (2 0))
+     (?2 (3 0))
+     (?3 (2 3))
+     (?4 (3 3)))))
+
+(defvar *klotski-setup* (first +klotski-setups+))
 
 (defvar *klotski-empty-cell-string*)
 
@@ -196,7 +218,8 @@
   (define-key klotski-mode-map (kbd "C-_") #'klotski-undo)
   (define-key klotski-mode-map (kbd "C-+") #'klotski-redo)
   (define-key klotski-mode-map (kbd "C-o") #'klotski-show-steps)
-  (define-key klotski-mode-map (kbd "C-t") #'klotski-replay))
+  (define-key klotski-mode-map (kbd "C-t") #'klotski-replay)
+  (define-key klotski-mode-map (kbd "C-s") #'klotski-setup))
 
 (define-derived-mode klotski-replay-mode special-mode "KLOTSKI-REPLAY"
   "Klotski (Hua Rong Dao) Game Replay"
@@ -206,6 +229,12 @@
   (define-key klotski-replay-mode-map (kbd "q") #'klotski-replay-stop)
   (define-key klotski-replay-mode-map (kbd "C-_") #'klotski-undo)
   (define-key klotski-replay-mode-map (kbd "C-+") #'klotski-redo))
+
+(define-derived-mode klotski-setup-mode special-mode "KLOTSKI-SETUP"
+  "Klotski (Hua Rong Dao) Game Setup"
+  (read-only-mode)
+  (set-buffer-modified-p nil)
+  (define-key klotski-setup-mode-map (kbd "q") #'klotski-cancel-setup))
 
 ;;;###autoload
 (cl-defun klotski-game ()
@@ -275,7 +304,7 @@
       (when record
        (klotski-steps-push (cons *klotski-current-actor* dir))))
     (klotski-put-current-actor)
-    (klotski-print-board)))
+    (klotski-print-game)))
 
 (cl-defun klotski-steps-reset ()
   (setf *klotski-steps* (dcons nil nil nil)
@@ -474,17 +503,20 @@
 	(cl-return nil)))))
 
 (cl-defun klotski-print-board ()
+  (dotimes (row +klotski-rows+)
+    (insert "  ")
+    (dotimes (col +klotski-cols+)
+      (insert (klotski-get-cell row col)))
+    (insert "\n")))
+
+(cl-defun klotski-print-game ()
   (let ((inhibit-read-only t))
     (erase-buffer)
     (insert "  Klotski (Hua Rong Dao) Game")
     (if (eq major-mode 'klotski-replay-mode)
 	(insert ": Replay"))
     (insert "\n\n")
-    (dotimes (row +klotski-rows+)
-      (insert "  ")
-      (dotimes (col +klotski-cols+)
-	(insert (klotski-get-cell row col)))
-      (insert "\n"))
+    (klotski-print-board)
     (insert (format "\nSteps: %d\n" *klotski-steps-count*))
     (when (klotski-check-success)
       (insert "\nCongratulation!  You success!\n\nRestart with C-r\n"))))
@@ -493,15 +525,55 @@
   (klotski-erase-board)
   (klotski-put-normal-actors)
   (klotski-put-current-actor)
-  (klotski-print-board))
+  (klotski-print-game))
 
 (cl-defun klotski-reset ()
   (interactive)
   (with-current-buffer +klotski-buffer-name+
-   (setf *klotski-actors* (copy-tree +klotski-actors-setup+)
+   (setf *klotski-actors* (copy-tree *klotski-setup*)
 	 *klotski-current-actor* (car *klotski-actors*))
    (klotski-steps-reset)
    (klotski-define-keys-for-actors klotski-mode-map)
    (klotski-refresh)))
+
+(cl-defun klotski-select-setup (no)
+  (setf *klotski-setup* (nth no +klotski-setups+))
+  (klotski-mode)
+  (klotski-reset))
+
+(cl-defun klotski-cancel-setup ()
+  (interactive)
+  (klotski-mode)
+  (klotski-reset))
+
+(cl-defun klotski-print-setup (setup no)
+  (insert (format "Setup: %d\n\n" (1+ no)))
+  (setf *klotski-actors* (copy-tree setup)
+	*klotski-current-actor* nil)
+  (klotski-erase-board)
+  (klotski-put-normal-actors)
+  (klotski-print-board)
+  (insert "\n"))
+
+(cl-defun klotski-define-keys-for-setup (no)
+  (define-key klotski-setup-mode-map
+    (kbd (make-string 1 (+ ?1 no)))
+    (lambda ()
+      (interactive)
+      (klotski-select-setup no))))
+
+(cl-defun klotski-setup ()
+  (interactive)
+  (with-current-buffer +klotski-buffer-name+
+   (let ((inhibit-read-only t))
+     (klotski-setup-mode)
+     (erase-buffer)
+     (cl-loop
+      for setup in +klotski-setups+
+      for no upfrom 0
+      do (progn
+	   (klotski-define-keys-for-setup no)
+	   (klotski-print-setup setup no)))
+     (goto-char 1))))
 
 (provide 'klotski)

@@ -195,8 +195,6 @@
 
 (defvar *klotski-setup* (first +klotski-setups+))
 
-(defvar *klotski-empty-cell-string*)
-
 (defvar *klotski-board* (make-vector (* +klotski-cols+ +klotski-rows+) " "))
 (defvar *klotski-actors*)
 (defvar *klotski-current-actor*)
@@ -211,9 +209,6 @@
   (read-only-mode)
   (set-buffer-modified-p nil)
   (klotski-define-keys-for-move klotski-mode-map)
-  (let ((str " "))
-    (put-text-property 0 1 'face 'klotski-normal-actor-face str)
-    (setf *klotski-empty-cell-string* str))
   (define-key klotski-mode-map (kbd "C-r") #'klotski-reset)
   (define-key klotski-mode-map (kbd "C-_") #'klotski-undo)
   (define-key klotski-mode-map (kbd "C-+") #'klotski-redo)
@@ -480,14 +475,14 @@
 	(klotski-steps-refill (klotski-replay-convert-steps replay-steps))
 	(klotski-replay-setup-timer)))))
 
-(defface klotski-current-actor-face
-  '((default :foreground "red" :height 2.0))
-  "Face for current klotski actor"
-  :group 'klotski-faces)
-
-(defface klotski-normal-actor-face
+(defface klotski-cell-face
   '((default :height 2.0))
   "Face for normal actor"
+  :group 'klotski-faces)
+
+(defface klotski-current-actor-face
+  '((default :foreground "red"))
+  "Face for current klotski actor"
   :group 'klotski-faces)
 
 (cl-defun klotski-check-success ()
@@ -501,15 +496,11 @@
   (cl-multiple-value-bind (actor npos)
       (klotski-get-cell row col)
     npos
-    (insert
-     (let ((str (and actor (make-string 1 (klotski-actor-char actor)))))
-       (cond
-	((null actor) *klotski-empty-cell-string*)
-	((eq actor *klotski-current-actor*)
-	 (put-text-property 0 1 'face 'klotski-current-actor-face str)
-	 str)
-	(t (put-text-property 0 1 'face 'klotski-normal-actor-face str)
-	   str))))))
+    (let ((str (if actor (make-string 1 (klotski-actor-char actor)) " ")))
+      (put-text-property 0 1 'face 'klotski-cell-face str)
+      (when (eq actor *klotski-current-actor*)
+	(put-text-property 0 1 'face 'klotski-current-actor-face str))
+      (insert str))))
 
 (cl-defun klotski-print-board ()
   (dotimes (row +klotski-rows+)

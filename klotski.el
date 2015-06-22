@@ -481,7 +481,7 @@
   :group 'klotski-faces)
 
 (defface klotski-current-actor-face
-  '((default :foreground "red"))
+  '((default :foreground "red" :inherit klotski-cell-face))
   "Face for current klotski actor"
   :group 'klotski-faces)
 
@@ -497,9 +497,11 @@
       (klotski-get-cell row col)
     npos
     (let ((str (if actor (make-string 1 (klotski-actor-char actor)) " ")))
-      (put-text-property 0 1 'face 'klotski-cell-face str)
-      (when (eq actor *klotski-current-actor*)
-	(put-text-property 0 1 'face 'klotski-current-actor-face str))
+      (put-text-property 0 1 'face
+			 (if (eq actor *klotski-current-actor*)
+			     'klotski-current-actor-face
+			   'klotski-cell-face)
+			 str)
       (insert str))))
 
 (cl-defun klotski-print-board ()

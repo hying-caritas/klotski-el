@@ -253,6 +253,9 @@
 (defsubst klotski-actor-pos-list (actor)
   (cdr actor))
 
+(defsubst klotski-current-actor-p (actor)
+  (eq actor *klotski-current-actor*))
+
 (cl-defun klotski-erase-board ()
   (dotimes (row +klotski-rows+)
     (dotimes (col +klotski-cols+)
@@ -270,7 +273,7 @@
 
 (cl-defun klotski-put-normal-actors ()
   (dolist (actor *klotski-actors*)
-    (unless (eq actor *klotski-current-actor*)
+    (unless (klotski-current-actor-p actor)
       (klotski-put-actor actor))))
 
 (cl-defun klotski-set-current-actor (actor)
@@ -481,7 +484,7 @@
   :group 'klotski-faces)
 
 (defface klotski-current-actor-face
-  '((default :foreground "red" :inherit klotski-cell-face))
+  '((default :foreground "red"))
   "Face for current klotski actor"
   :group 'klotski-faces)
 
@@ -497,11 +500,9 @@
       (klotski-get-cell row col)
     npos
     (let ((str (if actor (make-string 1 (klotski-actor-char actor)) " ")))
-      (put-text-property 0 1 'face
-			 (if (eq actor *klotski-current-actor*)
-			     'klotski-current-actor-face
-			   'klotski-cell-face)
-			 str)
+      (add-face-text-property 0 1 'klotski-cell-face nil str)
+      (when (klotski-current-actor-p actor)
+	(add-face-text-property 0 1 'klotski-current-actor-face nil str))
       (insert str))))
 
 (cl-defun klotski-print-board ()

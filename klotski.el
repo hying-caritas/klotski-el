@@ -495,6 +495,14 @@
       (unless (member pos caocao-pos-list)
 	(cl-return-from klotski-check-success nil)))))
 
+(cl-defun klotski-center-newline (&optional (n 1))
+  (save-excursion
+    (let ((end-pos (current-column))
+	  (width (window-width)))
+      (beginning-of-line)
+      (insert (make-string (/ (- width end-pos) 2) ?\s))))
+  (newline n))
+
 (cl-defun klotski-print-cell (row col)
   (cl-multiple-value-bind (actor npos)
       (klotski-get-cell row col)
@@ -507,22 +515,25 @@
 
 (cl-defun klotski-print-board ()
   (dotimes (row +klotski-rows+)
-    (insert "  ")
     (dotimes (col +klotski-cols+)
       (klotski-print-cell row col))
-    (insert "\n")))
+    (klotski-center-newline)))
 
 (cl-defun klotski-print-game ()
   (let ((inhibit-read-only t))
     (erase-buffer)
-    (insert "  Klotski (Hua Rong Dao) Game")
+    (insert "Klotski (Hua Rong Dao) Game")
     (if (eq major-mode 'klotski-replay-mode)
 	(insert ": Replay"))
-    (insert "\n\n")
+    (klotski-center-newline 2)
     (klotski-print-board)
-    (insert (format "\nSteps: %d\n" *klotski-steps-count*))
+    (insert (format "\nSteps: %d" *klotski-steps-count*))
+    (klotski-center-newline)
     (when (klotski-check-success)
-      (insert "\nCongratulation!  You success!\n\nRestart with C-r\n"))))
+      (insert "\nCongratulation!  You success!")
+      (klotski-center-newline)
+      (insert "Restart with C-r")
+      (klotski-center-newline))))
 
 (cl-defun klotski-refresh ()
   (klotski-erase-board)
@@ -550,13 +561,14 @@
   (klotski-reset))
 
 (cl-defun klotski-print-setup (setup no)
-  (insert (format "Setup: %d\n\n" (1+ no)))
+  (insert (format "Setup: %d" (1+ no)))
+  (klotski-center-newline 2)
   (setf *klotski-actors* (copy-tree setup)
 	*klotski-current-actor* nil)
   (klotski-erase-board)
   (klotski-put-normal-actors)
   (klotski-print-board)
-  (insert "\n"))
+  (klotski-center-newline))
 
 (cl-defun klotski-define-keys-for-setup (no)
   (define-key klotski-setup-mode-map

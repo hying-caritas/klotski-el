@@ -499,7 +499,7 @@
   (cl-multiple-value-bind (actor npos)
       (klotski-get-cell row col)
     npos
-    (let ((str (if actor (make-string 1 (klotski-actor-char actor)) " ")))
+    (let ((str (make-string 1 (if actor (klotski-actor-char actor) ?\s))))
       (add-face-text-property 0 1 'klotski-cell-face nil str)
       (when (klotski-current-actor-p actor)
 	(add-face-text-property 0 1 'klotski-current-actor-face nil str))
